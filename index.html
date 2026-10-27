@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#080b0a" />
+  <meta name="description" content="ترمینال شخصی مدیریت ثروت با تحلیل سبد دارایی، بازار، وام و دفتر کل؛ داده‌های شخصی در مرورگر شما نگهداری می‌شوند." />
+  <meta name="color-scheme" content="dark light" />
+  <title>ترمینال هوشمند مدیریت ثروت</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/premium-overrides.css" />
+</head>
+<body>
+  <a class="skip-link" href="#mainContent">رفتن به محتوای اصلی</a>
+  <!-- صفحه قفل PIN اختیاری -->
+  <div id="pinLockOverlay" class="pin-lock-overlay" role="dialog" aria-modal="true" aria-label="قفل امنیتی ترمینال">
+    <div class="pin-card">
+      <div style="font-size:1.1rem; font-weight:900; margin-bottom:0.4rem;">قفل حریم خصوصی ترمینال ثروت</div>
+      <div style="font-size:0.78rem; color:var(--text-sub); margin-bottom:1rem;">برای نمایش اطلاعات مالی، کد PIN خود را وارد کنید. این قفل فقط مانع مشاهده عادی در همین مرورگر می‌شود:</div>
+      <input type="password" id="pinUnlockInput" inputmode="numeric" maxlength="8" placeholder="••••" style="text-align:center; font-size:1.25rem; letter-spacing:6px; margin-bottom:0.65rem;" onkeydown="if(event.key==='Enter') window.unlockWithPin()" />
+      <div id="pinUnlockError" style="color:var(--loss); font-size:0.75rem; min-height:1.2rem; margin-bottom:0.5rem;"></div>
+      <button class="btn btn-primary" style="width:100%;" onclick="window.unlockWithPin()">باز کردن قفل</button>
+    </div>
+  </div>
+
+  <div class="container" id="mainContent" tabindex="-1">
+    <!-- بنر هشدار بالای صفحه (وقتی قیمت بورس > ۶ ساعت کهنه است یا نماد مشکوک دارد) -->
+    <div id="staleOrSuspectBanner" class="top-alert-banner" role="alert">
+      <div id="staleOrSuspectText">در حال بررسی وضعیت تازگی قیمت‌ها...</div>
+      <button class="btn" style="min-height:36px; padding:0.2rem 0.65rem;" onclick="window.syncAllLiveMarkets(false)">بروزرسانی مجدد</button>
+    </div>
+
+    <!-- بنر یادآور بکاپ هفتگی -->
+    <div id="weeklyBackupBanner" class="backup-reminder-banner" role="status">
+      <div><strong>یادآور پشتیبان‌گیری هفتگی:</strong> تمام داده‌های سبد شما فقط در حافظه مرورگر (localStorage) ذخیره می‌شوند. برای جلوگیری از حذف ناخواسته، فایل بکاپ هفتگی را دانلود کنید.</div>
+      <button class="btn btn-primary" style="min-height:36px; padding:0.25rem 0.75rem;" onclick="window.exportDatedJsonBackup()">دانلود بکاپ JSON</button>
+    </div>
+
+    <!-- هدر اصلی -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">
+          <svg class="svg-ic" style="width:22px;height:22px;" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div>
+          <div class="brand-title">ترمینال هوشمند مدیریت ثروت</div>
+          <div class="brand-sub">
+            <span id="jalaliHeaderDate">سه‌شنبه ۵ آبان ۱۴۰۵</span>
+            <span>•</span>
+            <span id="marketFreshnessStatusText">در حال بررسی وضعیت بازار...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button class="icon-btn" onclick="window.openQuickHub('stock')" aria-label="ثبت عملیات جدید" title="ثبت سریع عملیات (Ctrl+K)">
+          <svg class="svg-ic" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>ثبت عملیات</span>
+        </button>
+        <button class="icon-btn" id="syncBtnMain" onclick="window.syncAllLiveMarkets(false)" aria-label="بروزرسانی زنده قیمت‌ها" title="بروزرسانی قیمت‌ها">
+          <svg class="svg-ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          <span>بروزرسانی</span>
+        </button>
+        <button class="icon-btn" id="unitToggleBtn" onclick="window.toggleUnit()" aria-label="تغییر واحد تومان و ریال">تومان</button>
+        <button class="icon-btn" id="privacyBtn" onclick="window.togglePrivacy()" aria-label="مخفی‌سازی ارقام" title="مخفی‌سازی ارقام">
+          <svg class="svg-ic" id="eyeIconSvg" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <button class="icon-btn" onclick="window.lockTerminalNow()" aria-label="قفل کردن با PIN" title="قفل PIN">
+          <svg class="svg-ic" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </button>
+        <button class="icon-btn" onclick="window.toggleTheme()" aria-label="تغییر تم روشن و تاریک" title="تم روشن/تاریک">
+          <svg class="svg-ic" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+        <button class="icon-btn" onclick="window.openSettingsModal()" aria-label="تنظیمات و پشتیبان‌گیری" title="تنظیمات و بکاپ">
+          <svg class="svg-ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- نوار نرخ‌های کلیدی بازار -->
+    <div class="freshness-bar">
+      <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+        <span id="liveUsdBadge" class="badge badge-profit num">دلار آزاد: ۲۷۰٬۱۰۰ ت</span>
+        <span id="liveGoldBadge" class="badge badge-warn num">طلای ۱۸ عیار: ۱۷٬۸۵۰٬۰۰۰ ت</span>
+        <span id="liveCryptoBadge" class="badge badge-info num">BTC: $80,018 | ETH: $2,321 | SOL: $100.3</span>
+      </div>
+      <div style="font-size:0.72rem; color:var(--text-sub);">
+        <span>ذخیره‌سازی امن محلی (بدون ارسال دارایی به سرور)</span>
+      </div>
+    </div>
+
+    <!-- ناوبری ۴ تبه اصلی -->
+    <nav class="main-tabs-nav" aria-label="بخش‌های اصلی داشبورد">
+      <button class="nav-tab-item active" data-tab="tab1Overview" onclick="window.switchMainTab('tab1Overview', this)">
+        <svg class="svg-ic" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        <span>۱. نمای فرماندهی</span>
+      </button>
+      <button class="nav-tab-item" data-tab="tab2Markets" onclick="window.switchMainTab('tab2Markets', this)">
+        <svg class="svg-ic" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        <span>۲. دارایی‌ها و بازار</span>
+      </button>
+      <button class="nav-tab-item" data-tab="tab3Loans" onclick="window.switchMainTab('tab3Loans', this)">
+        <svg class="svg-ic" viewBox="0 0 24 24"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+        <span>۳. مهندسی وام</span>
+      </button>
+      <button class="nav-tab-item" data-tab="tab4Analytics" onclick="window.switchMainTab('tab4Analytics', this)">
+        <svg class="svg-ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+        <span>۴. تحلیل و دفتر کل</span>
+      </button>
+    </nav>
+
+    <!-- ==================== TAB 1: COMMAND OVERVIEW ==================== -->
+    <section id="tab1Overview" class="tab-pane active">
+      <!-- ردیف اول فرمان‌محور: ۱. ثروت کل (تومان و دلار) | ۲. سود امروز و بازده XIRR | ۳. ویجت هدف مالی -->
+      <div class="hero-command-grid">
+        <div class="card hero-card">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+              <div>
+                <span style="font-size:0.75rem; color:var(--text-sub);">ثروت کل (همراه با سبد وام)</span>
+                <div class="hero-net-val num" id="heroGrossWealth">۲۸۴٬۷۸۷٬۲۶۰ تومان</div>
+                <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap;">
+                  <span class="badge badge-info num" id="heroUsdEquiv">$1,058.6</span>
+                  <span style="font-size:0.73rem; color:var(--text-sub);">خالص پس از کسر وام: <strong class="num" id="heroNetAfterLoan" style="color:var(--c-stable)">۲۵۴٬۷۸۷٬۲۶۰ ت</strong></span>
+                </div>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.25rem;">
+                <div style="display:flex; gap:0.2rem;">
+                  <button class="btn chip-active" style="min-height:32px; min-width:36px; padding:0.15rem 0.45rem; font-size:0.68rem;" onclick="window.setHeroSparkRange(7, this)">۷ روز</button>
+                  <button class="btn" style="min-height:32px; min-width:36px; padding:0.15rem 0.45rem; font-size:0.68rem;" onclick="window.setHeroSparkRange(30, this)">۳۰ روز</button>
+                </div>
+                <div id="heroSparklineSvg" style="width:120px; height:40px;"></div>
+              </div>
+            </div>
+            <div id="heroMultiAllocBar" class="multi-alloc-bar"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.4rem; padding-top:0.45rem; border-top:1px solid var(--border); font-size:0.72rem; color:var(--text-sub);">
+            <span>بدهی اصل وام: <strong class="num" id="heroLoanDebt" style="color:var(--c-loan)">۳۰٬۰۰۰٬۰۰۰ تومان</strong></span>
+          </div>
+        </div>
+
+        <!-- کارت سود امروز و بازده واقعی XIRR -->
+        <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.74rem; color:var(--text-sub); margin-bottom:0.2rem;">
+              <span>تغییر و سود امروز</span>
+              <span class="badge badge-info">24H</span>
+            </div>
+            <div class="num" id="pnlDailyAmount" style="font-size:1.25rem; font-weight:900; color:var(--profit);">+۶۲٬۱۰۳ تومان</div>
+            <div class="num" id="pnlDailyUsd" style="font-size:0.75rem; color:var(--c-stable); margin-top:0.1rem;">+$0.23 (+۰٫۰۲٪)</div>
+          </div>
+          <div style="border-top:1px solid var(--border); padding-top:0.55rem; margin-top:0.55rem;">
+            <div style="display:flex; justify-content:space-between; font-size:0.74rem; color:var(--text-sub); margin-bottom:0.2rem;">
+              <span>سود کل و بازده واقعی (XIRR)</span>
+              <span class="badge badge-profit">XIRR</span>
+            </div>
+            <div class="num" id="pnlTotalAmount" style="font-size:1.1rem; font-weight:900; color:var(--profit);">+۲۹٬۵۰۰٬۰۰۰ تومان</div>
+            <div class="num" id="pnlTotalUsd" style="font-size:0.74rem; color:var(--c-stable); margin-top:0.1rem;">XIRR سالانه: +۳۸٫۴٪</div>
+          </div>
+        </div>
+
+        <!-- ویجت هدف مالی (wealthTargetToman & saveTargetWealth) -->
+        <div class="card goal-widget-card">
+          <div>
+            <div class="section-head" style="margin-bottom:0.35rem;">
+              <span class="section-title" style="font-size:0.86rem;">هدف مالی و پیشرفت</span>
+              <span id="goalProgressPctBadge" class="badge badge-profit num">۷۱٫۲٪</span>
+            </div>
+            <div id="goalCurrentVsTargetText" class="num" style="font-size:0.76rem; color:var(--text-sub); margin-bottom:0.25rem;">۲۸۴٬۷۸۷٬۲۶۰ از ۴۰۰٬۰۰۰٬۰۰۰ تومان</div>
+            <div class="progress-bar"><div id="goalProgressFill" class="progress-fill" style="width:71.2%;"></div></div>
+            <div id="goalRemainingText" class="num" style="font-size:0.73rem; color:var(--c-stable); margin-top:0.25rem;">مانده تا هدف: ۱۱۵٬۲۱۲٬۷۴۰ تومان</div>
+          </div>
+          <div style="display:flex; gap:0.4rem; align-items:center; margin-top:0.55rem; padding-top:0.5rem; border-top:1px solid var(--border);">
+            <input type="number" id="wealthTargetInput" class="num sensitive-input" aria-label="مبلغ هدف مالی به تومان" value="400000000" step="10000000" style="min-height:38px; font-size:0.76rem;" />
+            <button class="btn btn-primary" style="min-height:38px; padding:0 0.75rem; white-space:nowrap;" onclick="window.saveTargetWealth()">ثبت هدف</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ۳ اقدام اولویت‌دار روز -->
+      <div class="commander-card">
+        <div>
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.4rem;">
+            <div class="section-title" style="color:var(--c-stable);">۳ اقدام اولویت‌دار امروز</div>
+            <span class="badge badge-info">پیشنهاد هوشمند</span>
+          </div>
+          <div id="dailyCommanderList" class="cmd-list"></div>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:center; gap:0.8rem; background:var(--bg-elevated); padding:0.7rem; border-radius:var(--radius-lg); border:1px solid var(--border);">
+          <div id="commanderHealthSvgBox" style="width:68px; height:68px; display:flex; align-items:center; justify-content:center;"></div>
+          <div>
+            <div style="font-size:0.78rem; font-weight:800;">امتیاز سلامت سبد</div>
+            <div style="font-size:0.69rem; color:var(--text-sub); margin-top:0.12rem;">توازن دارایی‌ها</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- خلاصه ۵ کلاس دارایی -->
+      <div class="asset-strip">
+        <div class="mini-card c-stable">
+          <div class="mini-title">استیبل‌کوین (ETH)</div>
+          <div class="mini-val num" id="cardStableVal">۱۱۱٬۸۲۶٬۸۰۲ تومان</div>
+          <div class="mini-sub num" id="cardStableSub">$414.02 در شبکه اتریوم</div>
+        </div>
+        <div class="mini-card c-nft">
+          <div class="mini-title">کلکسیون NFT تلگرام</div>
+          <div class="mini-val num" id="cardNftVal">۶۱٬۶۰۰٬۰۰۰ تومان</div>
+          <div class="mini-sub num">ارزش کف (Floor)</div>
+        </div>
+        <div class="mini-card c-cash">
+          <div class="mini-title">نقدینگی ریالی</div>
+          <div class="mini-val num" id="cardCashVal">۴۶٬۹۷۸٬۲۷۸ تومان</div>
+          <div class="mini-sub num">بانک و کارگزاری</div>
+        </div>
+        <div class="mini-card c-loan">
+          <div class="mini-title">سبد وام ۳۰ میلیونی</div>
+          <div class="mini-val num" id="cardLoanAssetVal">۳۴٬۰۰۰٬۰۰۰ تومان</div>
+          <div class="mini-sub num" id="cardLoanAssetSub" style="color:var(--profit)">سود خالص: +۴٬۰۰۰٬۰۰۰ ت</div>
+        </div>
+        <div class="mini-card c-bourse">
+          <div class="mini-title">پورتفوی بورس ایران</div>
+          <div class="mini-val num" id="cardBourseVal">۲۸٬۷۲۷٬۷۷۹ تومان</div>
+          <div class="mini-sub num" id="cardBourseSub" style="color:var(--profit)">۱۱ نماد فعال</div>
+        </div>
+      </div>
+
+      <!-- نمودار ترکیب دارایی و نمودار دوگانه رشد ثروت (تومان + دلار) -->
+      <div class="grid-2">
+        <div class="card" style="margin-bottom:0;">
+          <div class="section-head">
+            <span class="section-title">ترکیب درصدی کل دارایی‌ها</span>
+            <span class="badge badge-info">۵ کلاس دارایی</span>
+          </div>
+          <div class="chart-wrap" style="height:220px;"><canvas id="allocationDonutCanvas"></canvas></div>
+          <div id="donutPercentLegend" class="donut-legend-5"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:0;">
+          <div class="section-head">
+            <span class="section-title">روند ثروت به تومان و دلار (سنجش بازده واقعی در تورم)</span>
+            <div style="display:flex; gap:0.35rem;">
+              <select id="historyCurrencyModeSelect" aria-label="واحد نمودار روند ثروت" style="width:auto; min-height:36px; padding:0.2rem 0.5rem;" onchange="window.renderOverviewCharts()">
+                <option value="both" selected>تومان + دلار (دوگانه)</option>
+                <option value="toman">فقط تومان</option>
+                <option value="usd">فقط دلار ($)</option>
+              </select>
+              <select id="historyRangeSelect" aria-label="بازه زمانی نمودار" style="width:auto; min-height:36px; padding:0.2rem 0.5rem;" onchange="window.renderOverviewCharts()">
+                <option value="7">۷ دوره اخیر</option>
+                <option value="all" selected>کل دوره</option>
+              </select>
+            </div>
+          </div>
+          <div class="chart-wrap" style="height:235px;"><canvas id="wealthGrowthLineCanvas"></canvas></div>
+          <div id="drawdownChartMeta" style="font-size:0.72rem; color:var(--text-sub); margin-top:0.4rem;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: MARKETS & ASSETS ==================== -->
+    <section id="tab2Markets" class="tab-pane">
+      <div class="sub-pill-nav">
+        <button class="sub-pill-btn active" onclick="window.scrollToSection('secBourse', this)">بورس ایران</button>
+        <button class="sub-pill-btn" onclick="window.scrollToSection('secDryPowder', this)">استیبل‌کوین و شکار ریزش</button>
+        <button class="sub-pill-btn" onclick="window.scrollToSection('secNftCash', this)">NFT و نقدینگی</button>
+      </div>
+
+      <div class="card" id="secBourse">
+        <div class="section-head">
+          <span class="section-title">پورتفوی بورس ایران (در موبایل کارت فشرده، در دسکتاپ جدول کامل)</span>
+          <div style="display:flex; flex-wrap:wrap; gap:0.35rem;">
+            <button class="btn btn-primary" onclick="window.syncAllLiveMarkets(false)">بروزرسانی قیمت</button>
+            <button class="btn" onclick="window.openQuickHub('stock')">افزودن سهم</button>
+            <button class="btn btn-danger" onclick="window.sellEntireStockPortfolioToCash()">فروش کل سبد به نقد</button>
+          </div>
+        </div>
+
+        <div id="bourseTreemapBox" class="treemap-grid"></div>
+
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.4rem; margin-bottom:0.7rem; padding:0.45rem; background:var(--bg-input); border-radius:10px;">
+          <div style="display:flex; flex-wrap:wrap; gap:0.3rem; align-items:center;">
+            <span style="font-size:0.73rem; color:var(--text-sub); font-weight:700;">مرتب‌سازی:</span>
+            <button class="btn chip-active" id="sortBtn_priceAsc" onclick="window.setStockSort('priceAsc', this)">قیمت کم به زیاد</button>
+            <button class="btn" id="sortBtn_priceDesc" onclick="window.setStockSort('priceDesc', this)">قیمت زیاد به کم</button>
+            <button class="btn" id="sortBtn_valDesc" onclick="window.setStockSort('valDesc', this)">بیشترین ارزش</button>
+            <button class="btn" id="sortBtn_pnlDesc" onclick="window.setStockSort('pnlDesc', this)">بیشترین سود (%)</button>
+          </div>
+          <input type="text" id="stockSearchChip" aria-label="جستجوی نماد بورسی" placeholder="جستجوی نماد..." style="width:160px; min-height:38px;" oninput="window.renderTerminal()" />
+        </div>
+
+        <!-- نمای دسکتاپ: جدول ۱۱ ستونه -->
+        <div class="table-box desktop-table-only">
+          <table class="sticky-col">
+            <thead>
+              <tr>
+                <th>نماد</th>
+                <th>نام شرکت / صندوق</th>
+                <th>روند</th>
+                <th>تعداد</th>
+                <th>میانگین خرید</th>
+                <th>قیمت روز</th>
+                <th>تغییر</th>
+                <th>ارزش خالص</th>
+                <th>سود / زیان</th>
+                <th>یادداشت</th>
+                <th>فروش</th>
+              </tr>
+            </thead>
+            <tbody id="stocksTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- نمای موبایل: کارت‌های فشرده با دکمه گسترش -->
+        <div id="stocksMobileCardsContainer" class="mobile-cards-only"></div>
+      </div>
+
+      <div class="card" id="secDryPowder">
+        <div class="section-head">
+          <span class="section-title">ذخیره استیبل‌کوین و پله‌های خرید رمزارز</span>
+          <span class="badge badge-info num" id="fxSpreadInfo">$414.02</span>
+        </div>
+        <div class="table-box" style="margin-bottom:0.75rem;">
+          <table>
+            <thead><tr><th>توکن</th><th>مقدار</th><th>ارزش دلاری</th><th>ارزش به دلار آزاد</th><th>ارزش به نرخ تتر</th><th>یادداشت</th></tr></thead>
+            <tbody id="stablecoinsTableBody"></tbody>
+          </table>
+        </div>
+        <div id="dipPlannerCards" class="grid-3"></div>
+      </div>
+
+      <div class="grid-2" id="secNftCash">
+        <div class="card" style="margin-bottom:0;">
+          <div class="section-head">
+            <span class="section-title">نقدینگی ریالی و فاصله تا تارگت تتر</span>
+            <span id="cashTargetBadge" class="badge badge-warn">رصد تارگت</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>نقد بانکی (تومان):</label><input type="number" id="cashAmountInput" class="sensitive-input" value="46000000" onchange="window.saveCashConfig()" /></div>
+            <div class="form-group"><label>قدرت خرید کارگزاری (تومان):</label><input type="number" id="brokerCashInput" class="sensitive-input" value="978278" onchange="window.saveCashConfig()" /></div>
+            <div class="form-group"><label>تارگت خرید تتر (تومان):</label><input type="number" id="cashTargetUsdtInput" class="sensitive-input" value="248000" onchange="window.saveCashConfig()" /></div>
+          </div>
+          <div style="background:var(--bg-input); padding:0.75rem; border-radius:12px;">
+            <div style="display:flex; justify-content:space-between; font-size:0.75rem; margin-bottom:0.25rem;">
+              <span>نزدیکی قیمت فعلی به تارگت خرید شما:</span>
+              <strong id="cashTargetFillPctText" class="num">۹۱٫۸٪</strong>
+            </div>
+            <div class="progress-bar"><div id="cashTargetProgressFill" class="progress-fill" style="width:91.8%;"></div></div>
+            <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.4rem; margin-top:0.5rem; font-size:0.76rem;">
+              <span>کل نقدینگی: <strong class="num" id="totalAvailableCashText">۴۶٬۹۷۸٬۲۷۸ ت</strong></span>
+              <span>خرید فعلی: <span class="badge badge-info num" id="cashBuysNowText">۱۷۳٫۹ USDT</span></span>
+              <span>خرید در تارگت: <span class="badge badge-profit num" id="cashBuysTargetText">۱۸۹٫۴ USDT</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:0;">
+          <div class="section-head">
+            <span class="section-title">کلکسیون NFT تلگرام (Floor Price)</span>
+            <button class="btn btn-primary" onclick="window.openQuickHub('nft')">افزودن NFT</button>
+          </div>
+          <div id="nftsCardGrid" class="nft-cards-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: LOANS & EARLY PAYOFF SIMULATOR ==================== -->
+    <section id="tab3Loans" class="tab-pane">
+      <div class="grid-2">
+        <div class="card">
+          <div class="section-head">
+            <span class="section-title">وام ۳۰ میلیونی و انتخابگر تاریخ شمسی</span>
+            <span class="badge badge-profit" id="loanArbitrageStatusPill">وضعیت آربیتراژ</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>عنوان وام:</label><input type="text" id="loanTitleInput" value="وام ۳۰ میلیونی (۱۲ ماهه)" onchange="window.saveLoanSettings()" /></div>
+            <div class="form-group"><label>اصل وام (تومان):</label><input type="number" id="loanPrincipalInput" class="sensitive-input" value="30000000" onchange="window.saveLoanSettings()" /></div>
+            <div class="form-group"><label>سود بانکی (%):</label><input type="number" id="loanRateInput" value="23" onchange="window.saveLoanSettings()" /></div>
+            <div class="form-group"><label>مدت (ماه):</label><input type="number" id="loanMonthsInput" value="12" onchange="window.saveLoanSettings()" /></div>
+          </div>
+
+          <!-- انتخابگر تاریخ شمسی شروع وام -->
+          <div class="form-group" style="margin-bottom:0.7rem;">
+            <label>تاریخ شروع وام (تقویم شمسی):</label>
+            <div class="jalali-picker-grid">
+              <select id="loanJalaliDay" aria-label="روز شروع وام" onchange="window.saveLoanSettings()">
+                <option value="1" selected>۱</option><option value="5">۵</option><option value="10">۱۰</option><option value="15">۱۵</option><option value="20">۲۰</option><option value="25">۲۵</option><option value="30">۳۰</option>
+              </select>
+              <select id="loanJalaliMonth" aria-label="ماه شروع وام" onchange="window.saveLoanSettings()">
+                <option value="1">فروردین</option><option value="2">اردیبهشت</option><option value="3">خرداد</option><option value="4">تیر</option><option value="5">مرداد</option><option value="6">شهریور</option><option value="7" selected>مهر</option><option value="8">آبان</option><option value="9">آذر</option><option value="10">دی</option><option value="11">بهمن</option><option value="12">اسفند</option>
+              </select>
+              <select id="loanJalaliYear" aria-label="سال شروع وام" onchange="window.saveLoanSettings()">
+                <option value="1404">۱۴۰۴</option><option value="1405" selected>۱۴۰۵</option><option value="1406">۱۴۰۶</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="loanBreakEvenCard" style="background:var(--bg-input); padding:0.75rem; border-radius:12px; margin-bottom:0.7rem; font-size:0.75rem;"></div>
+          <div id="loanSummaryStatsBox" style="display:grid; grid-template-columns:1fr 1fr; gap:0.45rem; background:var(--bg-input); padding:0.75rem; border-radius:10px; font-size:0.75rem; margin-bottom:0.75rem;"></div>
+
+          <!-- شبیه‌ساز پرداخت زودهنگام وام -->
+          <div style="background:var(--bg-elevated); border:1px solid var(--border-strong); border-radius:12px; padding:0.8rem; margin-bottom:0.75rem;">
+            <div style="font-size:0.82rem; font-weight:800; color:var(--c-stable); margin-bottom:0.5rem;">شبیه‌ساز تسویه زودهنگام وام</div>
+            <div class="form-row" style="grid-template-columns:1fr 1fr;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>تسویه در پایان ماه چندم؟</label>
+                <input type="number" id="earlyPayoffMonthInput" min="1" max="11" value="6" oninput="window.saveLoanSettings()" />
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>درصد بخشودگی سود آتی (%):</label>
+                <input type="number" id="earlyPenaltyDiscountInput" min="0" max="100" value="90" oninput="window.saveLoanSettings()" />
+              </div>
+            </div>
+            <div id="earlyPayoffResultBox" style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; font-size:0.74rem; margin-top:0.55rem;"></div>
+          </div>
+
+          <div style="border-top:1px solid var(--border); padding-top:0.7rem;">
+            <div class="section-head" style="margin-bottom:0.45rem;">
+              <span class="section-title" style="font-size:0.83rem;">دارایی‌های خریداری‌شده با وام:</span>
+              <button class="btn" onclick="window.openQuickHub('loanAsset')">افزودن دارایی وام</button>
+            </div>
+            <div class="table-box">
+              <table class="sticky-col">
+                <thead><tr><th>دارایی</th><th>بازار</th><th>مبلغ خرید</th><th>ارزش روز</th><th>سود/زیان</th><th>حذف</th></tr></thead>
+                <tbody id="loanAssetsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <span class="section-title">نمودار رشد دارایی وام در برابر بدهی و ۳ سناریو</span>
+            <span class="badge badge-info" id="loanNextDueBadge">سررسید قسط بعدی</span>
+          </div>
+          <div class="chart-wrap" style="height:220px;"><canvas id="loanYearEndChartCanvas"></canvas></div>
+          <div class="table-box" style="margin-top:0.65rem;">
+            <table>
+              <thead><tr><th>سناریوی پایان وام</th><th>رشد فرضی</th><th>ارزش نهایی</th><th>کل بازپرداخت</th><th>سود/زیان خالص</th></tr></thead>
+              <tbody id="loanScenariosTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:0;">
+        <div class="section-head">
+          <span class="section-title">تایم‌لاین ۱۲ قسط وام</span>
+          <span class="badge badge-info" id="loanPaidCountBadge">پرداخت‌شده: ۱ از ۱۲</span>
+        </div>
+        <div id="loanVisualTimelineGrid" class="loan-pills-grid"></div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 4: ANALYTICS & LEDGER ==================== -->
+    <section id="tab4Analytics" class="tab-pane">
+      <div class="sub-pill-nav">
+        <button class="sub-pill-btn active" onclick="window.scrollToSection('secDcaTool', this)">ماشین‌حساب DCA</button>
+        <button class="sub-pill-btn" onclick="window.scrollToSection('secCfoDollar', this)">تحلیل CFO دلار</button>
+        <button class="sub-pill-btn" onclick="window.scrollToSection('secRiskLedger', this)">ریبالانس و دفتر کل</button>
+      </div>
+
+      <div class="grid-2" id="secDcaTool">
+        <div class="card">
+          <div class="section-head">
+            <span class="section-title">ماشین‌حساب کم کردن میانگین (DCA)</span>
+            <select id="dcaPresetSelect" aria-label="انتخاب نماد برای محاسبه میانگین" style="width:auto;" onchange="window.loadDcaPreset(this.value)"></select>
+          </div>
+          <div class="form-row" style="grid-template-columns:1fr 1fr;">
+            <div class="form-group"><label>تعداد واحد فعلی:</label><input type="number" id="dcaCurQty" class="sensitive-input" value="5000" oninput="window.calcDcaSniper()" /></div>
+            <div class="form-group"><label>میانگین قیمت خرید فعلی:</label><input type="number" id="dcaCurAvg" class="sensitive-input" value="560" oninput="window.calcDcaSniper()" /></div>
+            <div class="form-group">
+              <label>قیمت روز / ورود جدید:</label>
+              <input type="number" id="dcaMarketPrice" class="sensitive-input" value="520" oninput="window.calcDcaSniper()" />
+              <input type="range" id="dcaMarketSlider" min="100" max="15000" value="520" style="margin-top:0.25rem;" oninput="document.getElementById('dcaMarketPrice').value=this.value; window.calcDcaSniper();" />
+            </div>
+            <div class="form-group">
+              <label>بودجه جدید خرید:</label>
+              <input type="number" id="dcaNewBudget" class="sensitive-input" value="5000000" oninput="window.calcDcaSniper()" />
+              <input type="range" id="dcaBudgetSlider" min="500000" max="50000000" step="500000" value="5000000" style="margin-top:0.25rem;" oninput="document.getElementById('dcaNewBudget').value=this.value; window.calcDcaSniper();" />
+            </div>
+          </div>
+          <div id="dcaComparisonBox" class="grid-2" style="gap:0.5rem;"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-head"><span class="section-title">نمودار پله‌ای افت قیمت سر‌به‌سر و جدول ۳ پله</span></div>
+          <div class="chart-wrap" style="height:170px; margin-bottom:0.6rem;"><canvas id="dcaStepChartCanvas"></canvas></div>
+          <div class="table-box">
+            <table>
+              <thead><tr><th>پله ورود</th><th>قیمت ورود</th><th>بودجه</th><th>واحد جدید</th><th>میانگین جدید</th><th>رشد لازم</th></tr></thead>
+              <tbody id="dcaLadderTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-4" id="secOnChainFng" style="margin-bottom:0.75rem;">
+        <div class="card" style="margin:0; text-align:center;">
+          <div style="font-size:0.72rem; color:var(--text-sub);">ترس و طمع</div>
+          <div id="gaugeFngSvg" style="width:120px; height:68px; margin:0 auto;"></div>
+          <div class="num" id="fngValueText" style="font-weight:800; font-size:0.8rem;">۵۰ / ۱۰۰</div>
+        </div>
+        <div class="card" style="margin:0; text-align:center;">
+          <div style="font-size:0.72rem; color:var(--text-sub);">آن‌چین MVRV Z-Score</div>
+          <div id="gaugeMvrvSvg" style="width:120px; height:68px; margin:0 auto;"></div>
+          <div class="num" id="onchainMvrvText" style="font-weight:800; font-size:0.8rem;">۱٫۶۴ (انباشت)</div>
+        </div>
+        <div class="card" style="margin:0; text-align:center;">
+          <div style="font-size:0.72rem; color:var(--text-sub);">دامیننس بیت‌کوین</div>
+          <div id="gaugeBtcdSvg" style="width:120px; height:68px; margin:0 auto;"></div>
+          <div class="num" id="onchainBtcdText" style="font-weight:800; font-size:0.8rem;">۵۷٫۴٪</div>
+        </div>
+        <div class="card" style="margin:0; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+          <div style="font-size:0.72rem; color:var(--text-sub); margin-bottom:0.35rem;">امتیاز سلامت سبد</div>
+          <div class="num" id="portfolioHealthDial" style="width:52px; height:52px; border-radius:50%; border:4px solid var(--profit); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:1.05rem;">۷۶</div>
+        </div>
+      </div>
+
+      <div class="grid-2" id="secCfoDollar">
+        <div class="card">
+          <div class="section-head">
+            <span class="section-title">عقربه فشار CFO دلار و تصمیم‌یار</span>
+            <button class="btn" onclick="window.resetCfoDefaults()">پیش‌فرض</button>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.9rem; background:var(--bg-input); border:1px solid var(--border-strong); border-radius:12px; padding:0.75rem; margin-bottom:0.7rem; flex-wrap:wrap;">
+            <div id="cfoPressureDialSvg" style="width:130px; height:74px; flex-shrink:0;"></div>
+            <div id="cfoDollarValuationCard" style="flex:1; min-width:190px; font-size:0.74rem; display:grid; gap:0.3rem;"></div>
+          </div>
+          <div class="form-row" style="grid-template-columns:1fr 1fr;">
+            <div style="background:var(--bg-input); padding:0.5rem; border-radius:9px;">
+              <div style="display:flex; justify-content:space-between; font-size:0.72rem;"><span>ریسک سیاسی: <b id="geoWarValText">۶۵</b></span><span>وزن: <input type="number" id="wWarInput" value="35" style="width:52px; min-height:32px; padding:0.1rem;" onchange="window.updateDollarMacroModel(true)" />%</span></div>
+              <input type="range" id="geoWarSlider" min="0" max="100" value="65" oninput="window.updateDollarMacroModel(false)" onchange="window.updateDollarMacroModel(true)" />
+            </div>
+            <div style="background:var(--bg-input); padding:0.5rem; border-radius:9px;">
+              <div style="display:flex; justify-content:space-between; font-size:0.72rem;"><span>تحریم و نفت: <b id="geoSanctionValText">۶۰</b></span><span>وزن: <input type="number" id="wSancInput" value="25" style="width:52px; min-height:32px; padding:0.1rem;" onchange="window.updateDollarMacroModel(true)" />%</span></div>
+              <input type="range" id="geoSanctionSlider" min="0" max="100" value="60" oninput="window.updateDollarMacroModel(false)" onchange="window.updateDollarMacroModel(true)" />
+            </div>
+            <div style="background:var(--bg-input); padding:0.5rem; border-radius:9px;">
+              <div style="display:flex; justify-content:space-between; font-size:0.72rem;"><span>رشد نقدینگی: <b id="geoInflationValText">۷۵</b></span><span>وزن: <input type="number" id="wInfInput" value="25" style="width:52px; min-height:32px; padding:0.1rem;" onchange="window.updateDollarMacroModel(true)" />%</span></div>
+              <input type="range" id="geoInflationSlider" min="0" max="100" value="75" oninput="window.updateDollarMacroModel(false)" onchange="window.updateDollarMacroModel(true)" />
+            </div>
+            <div style="background:var(--bg-input); padding:0.5rem; border-radius:9px;">
+              <div style="display:flex; justify-content:space-between; font-size:0.72rem;"><span>عرضه بانک مرکزی: <b id="geoCbiValText">۴۵</b></span><span>وزن-: <input type="number" id="wCbiInput" value="15" style="width:52px; min-height:32px; padding:0.1rem;" onchange="window.updateDollarMacroModel(true)" />%</span></div>
+              <input type="range" id="geoCbiSlider" min="0" max="100" value="45" oninput="window.updateDollarMacroModel(false)" onchange="window.updateDollarMacroModel(true)" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <span class="section-title">چارت دلار آزاد با خطوط SMA 90 و پله‌های خرید</span>
+            <span id="sma90StatusBadge" class="badge badge-info">SMA 90</span>
+          </div>
+          <div class="chart-wrap" style="height:220px;"><canvas id="dollarSma90Canvas"></canvas></div>
+          <div class="form-row" style="grid-template-columns: repeat(3, 1fr); margin-top:0.6rem;">
+            <div class="form-group"><label>پله ۱ (% از SMA90):</label><input type="number" id="smaStep1Pct" value="0" step="0.5" onchange="window.updateDollarMacroModel(true)" /></div>
+            <div class="form-group"><label>پله ۲ (% از SMA90):</label><input type="number" id="smaStep2Pct" value="2.5" step="0.5" onchange="window.updateDollarMacroModel(true)" /></div>
+            <div class="form-group"><label>مرز حباب (% بالا):</label><input type="number" id="smaStep3Pct" value="7.5" step="0.5" onchange="window.updateDollarMacroModel(true)" /></div>
+          </div>
+          <div id="sma90BuyZonesBox" style="display:grid; grid-template-columns:repeat(3,1fr); gap:0.4rem; font-size:0.71rem; text-align:center;"></div>
+        </div>
+      </div>
+
+      <div class="grid-2" id="secRiskLedger">
+        <div class="card">
+          <div class="section-head">
+            <span class="section-title">میز ریبالانس عملی و بازده XIRR</span>
+            <span class="badge badge-info" id="rebalanceSumBadge">جمع هدف: ۱۰۰٪</span>
+          </div>
+          <div class="grid-4" id="quantMetricsCards" style="margin-bottom:0.65rem;"></div>
+          <div class="form-row" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="form-group"><label>بورس (%):</label><input type="number" id="rebBourse" value="20" onchange="window.saveRebalanceTargets()" /></div>
+            <div class="form-group"><label>کریپتو (%):</label><input type="number" id="rebCrypto" value="10" onchange="window.saveRebalanceTargets()" /></div>
+            <div class="form-group"><label>استیبل (%):</label><input type="number" id="rebStable" value="30" onchange="window.saveRebalanceTargets()" /></div>
+            <div class="form-group"><label>نقد (%):</label><input type="number" id="rebCash" value="15" onchange="window.saveRebalanceTargets()" /></div>
+            <div class="form-group"><label>NFT (%):</label><input type="number" id="rebNft" value="10" onchange="window.saveRebalanceTargets()" /></div>
+            <div class="form-group"><label>طلا (%):</label><input type="number" id="rebGold" value="15" onchange="window.saveRebalanceTargets()" /></div>
+          </div>
+          <div id="rebalanceDualBarsBox" style="display:grid; gap:0.5rem;"></div>
+          <div id="realizedUnrealizedBox" style="display:grid; gap:0.4rem; background:var(--bg-input); padding:0.75rem; border-radius:10px; font-size:0.75rem; margin-top:0.65rem;"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <span class="section-title">دفتر کل تراکنش‌ها (شامل سود نقدی DPS و کارمزد)</span>
+            <div style="display:flex; gap:0.35rem;">
+              <button class="btn" onclick="window.openQuickHub('tx')">ثبت تراکنش / سود سهام</button>
+              <button class="btn btn-primary" onclick="window.exportTransactionsCsv()">خروجی CSV</button>
+            </div>
+          </div>
+          <div class="form-row" style="grid-template-columns: 1fr 1.5fr;">
+            <select id="txFilterType" aria-label="فیلتر نوع تراکنش" onchange="window.renderTransactionsTable()">
+              <option value="all">همه تراکنش‌ها</option>
+              <option value="خرید">خرید</option>
+              <option value="فروش">فروش</option>
+              <option value="سود نقدی">سود نقدی سهام/صندوق (DPS)</option>
+              <option value="کارمزد">کارمزد</option>
+              <option value="واریز">واریز</option>
+              <option value="برداشت">برداشت</option>
+            </select>
+            <input type="text" id="txSearchInput" aria-label="جستجو در تراکنش‌ها" placeholder="جستجو در نام دارایی یا یادداشت..." oninput="window.renderTransactionsTable()" />
+          </div>
+          <div class="table-box" style="max-height:220px; margin-bottom:0.7rem;">
+            <table class="sticky-col">
+              <thead><tr><th>تاریخ شمسی</th><th>نوع</th><th>دارایی</th><th>مبلغ</th><th>کارمزد</th><th>یادداشت</th></tr></thead>
+              <tbody id="transactionsTableBody"></tbody>
+            </table>
+          </div>
+          <div class="section-head" style="margin-bottom:0.4rem;">
+            <span class="section-title" style="font-size:0.82rem;">هشدارهای قیمتی فعال</span>
+          </div>
+          <div id="alertsCardsContainer" style="display:grid; gap:0.45rem;"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:0;">
+        <div class="section-head"><span class="section-title">مقایسه بازدهی سبد شما با بازارهای جهانی و تورم</span></div>
+        <div class="grid-2">
+          <div class="chart-wrap" style="height:230px;"><canvas id="globalCompareBarCanvas"></canvas></div>
+          <div class="table-box">
+            <table><thead><tr><th>رتبه</th><th>بازار / شاخص</th><th>بازده دلاری</th><th>بازده تومانی</th><th>ارزش نهایی (از ۲۰۰M)</th><th>مقایسه با شما</th></tr></thead><tbody id="globalCompareTableBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- دکمه شناور بدون هم‌پوشانی با ناوبری پایین -->
+  <button class="fab-quick-hub" onclick="window.openQuickHub('stock')" aria-label="ثبت سریع عملیات" title="ثبت سریع عملیات (Ctrl + K)">
+    <svg class="svg-ic" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <span>ثبت عملیات (Ctrl+K)</span>
+  </button>
+
+  <!-- محفظه Toast و Undo -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- مودال مرکز عملیات سریع -->
+  <div id="quickHubModal" class="modal-overlay" onclick="if(event.target===this) window.closeQuickHub()">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-label="مرکز ثبت عملیات">
+      <div class="section-head">
+        <span class="section-title">مرکز ثبت عملیات یکپارچه</span>
+        <button class="btn" onclick="window.closeQuickHub()">بستن (Esc)</button>
+      </div>
+
+      <div class="hub-tabs">
+        <button class="hub-tab-btn active" data-hub="hubStock" onclick="window.switchHubTab('hubStock', this)">خرید سهم</button>
+        <button class="hub-tab-btn" data-hub="hubTx" onclick="window.switchHubTab('hubTx', this)">تراکنش / سود سهام</button>
+        <button class="hub-tab-btn" data-hub="hubNft" onclick="window.switchHubTab('hubNft', this)">معامله NFT</button>
+        <button class="hub-tab-btn" data-hub="hubPrices" onclick="window.switchHubTab('hubPrices', this)">قیمت دستی / وام</button>
+      </div>
+
+      <div id="hubStock" class="hub-pane active">
+        <div class="form-row">
+          <div class="form-group"><label>نماد فارسی:</label><input type="text" id="newStockSymbol" placeholder="مثلاً: کرومیت" /></div>
+          <div class="form-group"><label>نام شرکت / صندوق:</label><input type="text" id="newStockName" placeholder="فرآوری معدنی کرومیت" /></div>
+          <div class="form-group"><label>تعداد واحد:</label><input type="number" id="newStockQty" class="sensitive-input" placeholder="5000" /></div>
+          <div class="form-group"><label>قیمت خرید (تومان):</label><input type="number" id="newStockBuyPrice" class="sensitive-input" placeholder="557" /></div>
+          <div class="form-group" style="grid-column:span 2;"><label>یادداشت / استراتژی خرید:</label><input type="text" id="newStockNote" placeholder="دلیل بنیادی یا تکنیکال..." /></div>
+        </div>
+        <label style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.75rem; font-size:0.76rem;">
+          <input type="checkbox" id="deductFromCashCheckbox" checked style="width:18px; height:18px; min-height:18px;" /> کسر خودکار مبلغ خرید و کارمزد از موجودی نقدینگی ریالی
+        </label>
+        <button class="btn btn-primary" style="width:100%;" onclick="window.confirmAddStock()">ثبت خرید سهم در پورتفوی</button>
+      </div>
+
+      <div id="hubTx" class="hub-pane">
+        <div class="form-row">
+          <div class="form-group"><label>نوع تراکنش:</label>
+            <select id="txTypeInput">
+              <option value="خرید">خرید دارایی</option>
+              <option value="فروش">فروش دارایی</option>
+              <option value="سود نقدی">سود نقدی سهام / صندوق (DPS)</option>
+              <option value="کارمزد">کارمزد کارگزاری / شبکه</option>
+              <option value="واریز">واریز وجه جدید (مؤثر در XIRR)</option>
+              <option value="برداشت">برداشت وجه (مؤثر در XIRR)</option>
+            </select>
+          </div>
+          <div class="form-group"><label>نام دارایی / حساب:</label><input type="text" id="txAssetInput" placeholder="مثلاً: شپدیس یا فپنتا" /></div>
+          <div class="form-group"><label>مبلغ کل (تومان):</label><input type="number" id="txAmountInput" class="sensitive-input" placeholder="1250000" /></div>
+          <div class="form-group"><label>کارمزد (تومان - اختیاری):</label><input type="number" id="txFeeInput" class="sensitive-input" placeholder="0" value="0" /></div>
+        </div>
+
+        <!-- انتخابگر تاریخ شمسی تراکنش -->
+        <div class="form-group" style="margin-bottom:0.65rem;">
+          <label>تاریخ شمسی تراکنش:</label>
+          <div class="jalali-picker-grid">
+            <select id="txJalaliDay" aria-label="روز تراکنش">
+              <option value="1">۱</option><option value="5" selected>۵</option><option value="10">۱۰</option><option value="15">۱۵</option><option value="20">۲۰</option><option value="25">۲۵</option><option value="30">۳۰</option>
+            </select>
+            <select id="txJalaliMonth" aria-label="ماه تراکنش">
+              <option value="1">فروردین</option><option value="2">اردیبهشت</option><option value="3">خرداد</option><option value="4">تیر</option><option value="5">مرداد</option><option value="6">شهریور</option><option value="7">مهر</option><option value="8" selected>آبان</option><option value="9">آذر</option><option value="10">دی</option><option value="11">بهمن</option><option value="12">اسفند</option>
+            </select>
+            <select id="txJalaliYear" aria-label="سال تراکنش">
+              <option value="1404">۱۴۰۴</option><option value="1405" selected>۱۴۰۵</option><option value="1406">۱۴۰۶</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0.65rem;">
+          <label>توضیحات تراکنش:</label>
+          <input type="text" id="txNoteInput" placeholder="مثلاً: واریز سود مجمع سالانه..." />
+        </div>
+        <button class="btn btn-primary" style="width:100%; margin-bottom:0.85rem;" onclick="window.addManualTransaction()">ثبت در دفتر کل تراکنش‌ها</button>
+
+        <div style="border-top:1px solid var(--border); padding-top:0.75rem;">
+          <div style="font-size:0.78rem; font-weight:800; margin-bottom:0.45rem;">افزودن هشدار قیمتی جدید:</div>
+          <div class="form-row" style="grid-template-columns: 1fr 1fr 1fr auto; align-items:end;">
+            <div class="form-group" style="margin-bottom:0;"><label>دارایی:</label>
+              <select id="alertAssetSelect"><option value="USDT">دلار آزاد / تتر</option><option value="BTC">بیت‌کوین ($)</option><option value="ETH">اتریوم ($)</option><option value="وفیروزه">وفیروزه</option><option value="فپنتا">فپنتا</option><option value="شپدیس">شپدیس</option></select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;"><label>شرط:</label><select id="alertCondSelect"><option value="below">پایین‌تر از</option><option value="above">بالاتر از</option></select></div>
+            <div class="form-group" style="margin-bottom:0;"><label>هدف:</label><input type="number" id="alertTargetPriceInput" placeholder="250000" /></div>
+            <button class="btn btn-primary" onclick="window.addPriceAlert()">ثبت هشدار</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="hubNft" class="hub-pane">
+        <div style="font-size:0.78rem; font-weight:800; margin-bottom:0.45rem;">ثبت خرید آیتم NFT جدید:</div>
+        <div class="form-row">
+          <div class="form-group"><label>نام آیتم:</label><input type="text" id="newNftName" placeholder="Plush Pepe / @user" /></div>
+          <div class="form-group"><label>قیمت خرید (تومان):</label><input type="number" id="newNftBuy" class="sensitive-input" placeholder="12000000" /></div>
+          <div class="form-group"><label>ارزش کف فعلی (تومان):</label><input type="number" id="newNftFloor" class="sensitive-input" placeholder="13500000" /></div>
+          <div class="form-group"><label>یادداشت:</label><input type="text" id="newNftNote" placeholder="خرید از فرگمنت" /></div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="window.confirmAddNft()">افزودن به کلکسیون NFT</button>
+
+        <div id="sellNftInlineSection" style="display:none; border-top:1px solid var(--border); margin-top:0.85rem; padding-top:0.75rem;">
+          <div style="font-size:0.78rem; font-weight:800; color:var(--profit); margin-bottom:0.45rem;">تسویه و فروش آیتم NFT انتخابی:</div>
+          <input type="hidden" id="sellNftIdxInput" />
+          <div class="form-row">
+            <div class="form-group"><label>آیتم:</label><input type="text" id="sellNftNameText" disabled /></div>
+            <div class="form-group"><label>خرید اولیه:</label><input type="number" id="sellNftBuyText" disabled /></div>
+            <div class="form-group"><label>قیمت فروش قطعی (تومان):</label><input type="number" id="sellNftPriceInput" oninput="window.previewNftSalePnl()" /></div>
+            <div class="form-group"><label>واریز به:</label>
+              <select id="sellNftDestSelect"><option value="cash">موجودی نقد ریالی</option><option value="usdt">استیبل‌کوین (USDT)</option></select>
+            </div>
+          </div>
+          <div id="sellNftPreviewBox" style="padding:0.6rem; background:var(--bg-input); border-radius:8px; margin-bottom:0.6rem; font-size:0.76rem;"></div>
+          <button class="btn btn-primary" style="width:100%;" onclick="window.confirmSellNft()">ثبت قطعی فروش NFT</button>
+        </div>
+      </div>
+
+      <div id="hubPrices" class="hub-pane">
+        <div style="font-size:0.78rem; font-weight:800; margin-bottom:0.4rem;">افزودن دارایی خریداری‌شده با وام ۳۰ میلیونی:</div>
+        <div class="form-row" style="grid-template-columns: 1.2fr 1fr 1fr auto; align-items:end;">
+          <div class="form-group" style="margin-bottom:0;"><label>نام دارایی:</label><input type="text" id="loanItemNameInput" placeholder="مثلاً: بیت کوین" /></div>
+          <div class="form-group" style="margin-bottom:0;"><label>خرید (تومان):</label><input type="number" id="loanItemBuyTomanInput" placeholder="15000000" /></div>
+          <div class="form-group" style="margin-bottom:0;"><label>ارزش روز:</label><input type="number" id="loanItemCurTomanInput" placeholder="17200000" /></div>
+          <button class="btn btn-primary" onclick="window.addLoanAssetItem()">ثبت</button>
+        </div>
+
+        <div style="border-top:1px solid var(--border); margin-top:0.8rem; padding-top:0.7rem;">
+          <div style="font-size:0.78rem; font-weight:800; margin-bottom:0.45rem;">بروزرسانی دستی قیمت نمادها، کریپتو و دلار آزاد:</div>
+          <div id="manualPricesFormBox" class="form-row" style="max-height:190px; overflow-y:auto;"></div>
+          <button class="btn btn-primary" style="width:100%;" onclick="window.saveManualPrices()">ثبت و قفل کردن قیمت دستی</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال تنظیمات، قفل PIN و پشتیبان‌گیری JSON -->
+  <div id="settingsModal" class="modal-overlay" onclick="if(event.target===this) window.closeSettingsModal()">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-label="تنظیمات و پشتیبان‌گیری">
+      <div class="section-head">
+        <span class="section-title">تنظیمات، قفل امنیتی PIN و پشتیبان‌گیری محلی</span>
+        <button class="btn" onclick="window.closeSettingsModal()">بستن</button>
+      </div>
+
+      <div class="form-row" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="form-group"><label>نرخ بدون ریسک (%):</label><input type="number" id="riskFreeRateInput" value="23" onchange="window.saveRiskSettings()" /></div>
+        <div class="form-group"><label>مرز هشدار تمرکز (%):</label><input type="number" id="concThresholdInput" value="30" onchange="window.saveRiskSettings()" /></div>
+        <div class="form-group"><label>کارمزد بورس (%):</label><input type="number" id="bourseFeePctInput" step="0.1" value="0.88" onchange="window.saveRiskSettings()" /></div>
+        <div class="form-group"><label>تورم سالانه (%):</label><input type="number" id="inflationRateInput" value="42" onchange="window.renderTerminal()" /></div>
+      </div>
+
+      <!-- تنظیم قفل PIN اختیاری -->
+      <div style="background:var(--bg-input); padding:0.75rem; border-radius:12px; margin-bottom:0.75rem;">
+        <div style="font-size:0.78rem; font-weight:800; margin-bottom:0.35rem;">قفل حریم خصوصی PIN (اختیاری):</div>
+        <p style="font-size:0.72rem;color:var(--text-sub);margin-bottom:0.5rem;">توجه: PIN فقط نمایش عادی صفحه را قفل می‌کند و جایگزین رمزگذاری داده‌ها یا امنیت دستگاه نیست. اطلاعات سبد در حافظه همین مرورگر ذخیره می‌شود.</p>
+        <div style="display:flex; gap:0.45rem; align-items:center;">
+          <input type="password" id="newPinSettingInput" inputmode="numeric" maxlength="8" placeholder="کد PIN جدید (خالی = حذف قفل)" style="min-height:38px;" />
+          <button class="btn btn-primary" style="min-height:38px; white-space:nowrap;" onclick="window.saveOrClearPinLock()">ذخیره / حذف PIN</button>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.65rem;">
+        <button class="btn btn-primary" onclick="window.exportDatedJsonBackup()">دانلود فایل بکاپ JSON (موجودی در localStorage)</button>
+        <label class="btn" style="cursor:pointer;">بارگذاری فایل بکاپ JSON (با اعتبارسنجی ساختار)<input type="file" accept=".json" style="display:none;" onchange="window.importJsonBackupFile(event)" /></label>
+      </div>
+
+      <div class="form-group">
+        <label>ویرایشگر خام داده‌های سبد (Raw JSON Editor):</label>
+        <textarea id="portfolioJsonTextarea" rows="7" style="direction:ltr; font-family:monospace; margin-bottom:0.6rem;"></textarea>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:0.4rem;">
+        <button class="btn btn-primary" onclick="window.savePortfolioJson()">ذخیره تغییرات JSON</button>
+        <button class="btn btn-danger" id="twoStepResetBtn" onclick="window.triggerTwoStepReset()">بازنشانی کل حافظه (۲ مرحله‌ای)</button>
+      </div>
+    </div>
+  </div>
+
+    <script src="js/data.js"></script>
+  <script src="js/compute.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
